@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SpeedG3 - Triple Duelo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Roboto:wght@400;900&display=swap');
+
+        :root {
+            --track-gray: #333;
+            --curve-yellow: #facc15;
+            --finish-line: repeating-conic-gradient(#fff 0% 25%, #000 0% 50%) 50% / 15px 15px;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #0a0a0a;
+            color: white;
+            overflow-x: hidden;
+        }
+
+        .racing-font { font-family: 'Orbitron', sans-serif; }
+
+        .circuit-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 50px);
+            grid-template-rows: repeat(10, 50px);
+            gap: 4px;
+            justify-content: center;
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 20px;
+            border: 4px solid #333;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+        }
+
+        .track-slot {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #444;
+            position: relative;
+            background-color: var(--track-gray);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.5rem;
+            color: #666;
+            border-radius: 4px;
+        }
+
+        .track-slot.curve {
+            background-color: var(--curve-yellow);
+            border-color: #ca8a04;
+            color: #000;
+            font-weight: bold;
+            border-radius: 8px;
+        }
+
+        .empty-slot { 
+            background: radial-gradient(circle, #151515 10%, transparent 11%);
+            background-size: 10px 10px;
+            border: none; 
+        }
+
+        .finish-slot {
+            background: var(--finish-line);
+            border: 3px solid #3b82f6;
+            color: #000;
+            z-index: 5;
+        }
+
+        .finish-label {
+            background: #3b82f6;
+            color: white;
+            padding: 1px 3px;
+            font-size: 7px;
+            font-weight: bold;
+            position: absolute;
+            bottom: -8px;
+            border-radius: 2px;
+        }
+
+        .car {
+            width: 22px;
+            height: 12px;
+            border-radius: 3px;
+            position: absolute;
+            z-index: 30;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: 2px solid #fff;
+        }
+
+        .car-p1 { background-color: #3b82f6; box-shadow: 0 0 10px #3b82f6; }
+        .car-cpu1 { background-color: #ef4444; box-shadow: 0 0 10px #ef4444; }
+        .car-cpu2 { background-color: #22c55e; box-shadow: 0 0 10px #22c55e; }
+
+        .card-btn { 
+            width: 75px; 
+            height: 100px; 
+            cursor: pointer; 
+            position: relative; 
+            transition: transform 0.2s;
+        }
+        
+        .card-inner {
+            background: linear-gradient(135deg, #2a2a2a, #111);
+            border: 2px solid #444;
+            border-radius: 12px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            font-weight: 900;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.2s;
+        }
+
+        .card-btn:hover:not(.disabled-card) .card-inner {
+            transform: translateY(-5px);
+            border-color: #3b82f6;
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .card-btn.to-discard .card-inner {
+            border-color: #ef4444;
+            background: linear-gradient(135deg, #451a1a, #111);
+            color: #ef4444;
+        }
+
+        .discard-zone {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 24px;
+            height: 24px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            transition: background 0.2s, transform 0.2s;
+            color: #999;
+        }
+
+        .card-btn.to-discard .discard-zone {
+            background: #ef4444;
+            color: white;
+        }
+
+        .disabled-card { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+
+        .log-container {
+            max-height: 200px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+
+        .error-shake { animation: shake 0.4s ease-in-out; }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        .turn-indicator {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 10px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .skip-btn {
+            transition: all 0.2s;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .skip-btn:hover:not(:disabled) {
+            background: #333;
+            border-color: #555;
+        }
+    </style>
+</head>
+<body class="p-4">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="text-center mb-4">
+            <h1 class="text-4xl font-bold racing-font text-blue-500 italic tracking-widest">SPEED<span class="text-white">G3</span></h1>
+            <div class="flex justify-center gap-4 mt-2">
+                <span id="turn-badge" class="turn-indicator bg-blue-600 text-white tracking-widest">INICIANDO...</span>
+                <span class="text-[10px] text-gray-500 uppercase tracking-widest font-bold self-center">Estrategia • Circuito Vertical • Rebufos Dinámicos</span>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-6 gap-4">
+            
+            <!-- Side Panels -->
+            <div class="lg:col-span-1 space-y-3">
+                <div id="p1-panel" class="bg-zinc-900 p-3 rounded-xl border border-blue-900/30">
+                    <div class="flex justify-between items-center"><span class="text-[9px] text-blue-400 font-bold uppercase">PILOTO (AZUL)</span><span id="p1-lap-val" class="text-xs font-black">1/3</span></div>
+                    <div class="w-full bg-zinc-800 h-1.5 mt-1 rounded-full"><div id="p1-lap-bar" class="bg-blue-600 h-full w-0 transition-all"></div></div>
+                </div>
+
+                <div id="cpu1-panel" class="bg-zinc-900 p-3 rounded-xl border border-red-900/30 opacity-70">
+                    <div class="flex justify-between items-center"><span class="text-[9px] text-red-500 font-bold uppercase">CPU 1 (ROJO)</span><span id="cpu1-lap-val" class="text-xs font-black">1/3</span></div>
+                    <div class="w-full bg-zinc-800 h-1.5 mt-1 rounded-full"><div id="cpu1-lap-bar" class="bg-red-600 h-full w-0 transition-all"></div></div>
+                </div>
+
+                <div id="cpu2-panel" class="bg-zinc-900 p-3 rounded-xl border border-green-900/30 opacity-70">
+                    <div class="flex justify-between items-center"><span class="text-[9px] text-green-500 font-bold uppercase">CPU 2 (VERDE)</span><span id="cpu2-lap-val" class="text-xs font-black">1/3</span></div>
+                    <div class="w-full bg-zinc-800 h-1.5 mt-1 rounded-full"><div id="cpu2-lap-bar" class="bg-green-600 h-full w-0 transition-all"></div></div>
+                </div>
+
+                <div class="bg-black/50 p-4 rounded-xl border border-zinc-800">
+                    <h3 class="text-[10px] uppercase text-zinc-500 mb-2 font-bold tracking-widest text-center">Radio de Carrera</h3>
+                    <div id="log" class="log-container text-[10px] space-y-1 font-mono text-zinc-400"></div>
+                </div>
+            </div>
+
+            <!-- Central Track -->
+            <div class="lg:col-span-4 flex justify-center items-center">
+                <div id="circuit" class="circuit-grid"></div>
+            </div>
+
+            <!-- Player Hand -->
+            <div class="lg:col-span-1">
+                <div id="hand-panel" class="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 h-full flex flex-col shadow-xl">
+                    <h2 class="racing-font text-center text-[10px] text-blue-400 mb-3 uppercase tracking-tighter">Tu Mano de Carrera</h2>
+                    
+                    <div id="hand" class="flex flex-wrap justify-center gap-2 mb-4 min-h-[120px]"></div>
+                    
+                    <button id="skip-btn" onclick="skipTurn()" class="skip-btn w-full py-3 mb-4 bg-zinc-800 text-zinc-300 rounded-xl font-bold text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+                        Pasar Turno / Boxes
+                    </button>
+
+                    <div class="mt-auto p-3 bg-black/40 rounded-xl">
+                        <div class="flex justify-between text-[9px] text-zinc-500 font-bold mb-2 uppercase">
+                            <span>Mazo</span>
+                            <span id="deck-count" class="text-blue-400">0</span>
+                        </div>
+                        <p class="text-[8px] text-zinc-500 leading-relaxed italic">
+                            🏎️ Click número: Jugar.<br>
+                            🗑️ Icono papelera: Marcar descarte.<br>
+                            🏁 Rebufo: Si alguien está a 2 casillas por delante.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Win Modal -->
+    <div id="win-modal" class="fixed inset-0 bg-black/95 hidden items-center justify-center z-50 p-6">
+        <div class="bg-zinc-900 border-2 border-blue-500 p-10 rounded-[40px] max-w-sm w-full text-center">
+            <h2 id="win-title" class="text-3xl racing-font text-white mb-2 italic">POLE POSITION</h2>
+            <p id="win-subtitle" class="text-zinc-400 mb-8 uppercase text-xs tracking-widest"></p>
+            <button onclick="resetGame()" class="w-full bg-blue-600 py-4 rounded-2xl font-black text-white hover:bg-blue-500">NUEVA CARRERA</button>
+        </div>
+    </div>
+
+    <script>
+        // Circuito Vertical 10x10
+        const TRACK_PATH = [
+            [0,4],[0,5],[0,6],[0,7],[0,8],[0,9],
+            [1,9],[2,9],[3,9],[4,9],[5,9],[6,9],[7,9],[8,9],[9,9],
+            [9,8],[9,7],[9,6],[9,5],[9,4],[9,3],[9,2],[9,1],[9,0],
+            [8,0],[7,0],[6,0],[5,0],[4,0],[3,0],[2,0],[1,0],[0,0],
+            [0,1],[1,1],[2,1],[3,1],[4,1],[5,1],[6,1],[7,1],[7,2],[7,3],
+            [6,3],[5,3],[4,3],[3,3],[2,3],[1,3],[0,3]
+        ];
+        
+        const TOTAL_TILES = TRACK_PATH.length;
+        const LAPS_TO_WIN = 3;
+        const CURVE_TILES = [5, 6, 14, 15, 23, 24, 32, 33, 40, 41, 42, 49, 50]; 
+        const SPEED_LIMIT_CURVE = 3;
+
+        let players = {
+            p1:   { pos: 0, lap: 1, hand: [], deck: [], id: 'p1',   name: 'PILOTO', color: '#3b82f6', isCPU: false },
+            cpu1: { pos: 0, lap: 1, hand: [], deck: [], id: 'cpu1', name: 'CPU 1',  color: '#ef4444', isCPU: true },
+            cpu2: { pos: 49, lap: 1, hand: [], deck: [], id: 'cpu2', name: 'CPU 2',  color: '#22c55e', isCPU: true }
+        };
+        
+        let turnOrder = [];
+        let turnIdx = 0;
+        let isMoving = false;
+        let winners = [];
+        let p1SelectedDiscards = new Set();
+
+        function initBoard() {
+            const circuit = document.getElementById('circuit');
+            circuit.innerHTML = '';
+            for(let r=0; r<10; r++) {
+                for(let c=0; c<10; c++) {
+                    const slot = document.createElement('div');
+                    slot.className = 'track-slot empty-slot';
+                    slot.id = `cell-${r}-${c}`;
+                    circuit.appendChild(slot);
+                }
+            }
+
+            TRACK_PATH.forEach((coords, index) => {
+                const [r, c] = coords;
+                const slot = document.getElementById(`cell-${r}-${c}`);
+                slot.classList.remove('empty-slot');
+                slot.classList.add('track-slot');
+                slot.id = `slot-${index}`;
+                if (CURVE_TILES.includes(index)) slot.classList.add('curve');
+                if (index === 0) {
+                    slot.classList.add('finish-slot');
+                    slot.innerHTML = '<div class="finish-label">META</div>';
+                } else {
+                    slot.innerText = index;
+                }
+            });
+            updateCarsUI();
+        }
+
+        function createDeck() {
+            let d = [];
+            for (let i = 1; i <= 5; i++) { d.push(i, i, i, i); }
+            for (let i = 0; i < d.length; i++) {
+                const j = Math.floor(Math.random() * d.length);
+                [d[i], d[j]] = [d[j], d[i]];
+            }
+            return d;
+        }
+
+        function refillHand(pid) {
+            let entity = players[pid];
+            while (entity.hand.length < 3) {
+                if (entity.deck.length === 0) entity.deck = createDeck();
+                entity.hand.push(entity.deck.pop());
+            }
+            if (pid === 'p1') {
+                renderPlayerHand();
+                document.getElementById('deck-count').innerText = entity.deck.length;
+            }
+        }
+
+        function renderPlayerHand() {
+            const handEl = document.getElementById('hand');
+            const skipBtn = document.getElementById('skip-btn');
+            if (!handEl) return;
+            handEl.innerHTML = '';
+            
+            const activeId = turnOrder[turnIdx];
+            const isP1Turn = (activeId === 'p1');
+
+            if (skipBtn) skipBtn.disabled = !isP1Turn || isMoving;
+
+            players.p1.hand.forEach((val, idx) => {
+                const isMarked = p1SelectedDiscards.has(idx);
+                const btn = document.createElement('div');
+                btn.className = `card-btn ${(!isP1Turn || isMoving) ? 'disabled-card' : ''} ${isMarked ? 'to-discard' : ''}`;
+                
+                btn.innerHTML = `
+                    <div class="card-inner">
+                        <div class="discard-zone" onclick="toggleDiscard(event, ${idx})">
+                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                            </svg>
+                        </div>
+                        <span class="text-[8px] text-zinc-500 font-bold uppercase tracking-widest absolute bottom-4">KMH</span>
+                        ${val}
+                    </div>
+                `;
+                
+                btn.onclick = (e) => {
+                    if (e.target.closest('.discard-zone')) return;
+                    playCard(idx);
+                };
+                
+                handEl.appendChild(btn);
+            });
+        }
+
+        function toggleDiscard(event, idx) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (isMoving || turnOrder[turnIdx] !== 'p1') return;
+            if (p1SelectedDiscards.has(idx)) {
+                p1SelectedDiscards.delete(idx);
+            } else {
+                p1SelectedDiscards.add(idx);
+            }
+            renderPlayerHand();
+        }
+
+        async function playCard(idx) {
+            if (isMoving || turnOrder[turnIdx] !== 'p1') return;
+            
+            let p = players.p1;
+            const steps = p.hand[idx];
+            
+            if (isCurveViolation(p.pos, steps)) {
+                triggerError();
+                addToLog("P1", `¡CURVA! Límite excedido (${SPEED_LIMIT_CURVE} KMH)`, "text-red-400");
+                return;
+            }
+
+            isMoving = true;
+            
+            const indicesToRemove = new Set(p1SelectedDiscards);
+            indicesToRemove.add(idx);
+
+            const newHand = p.hand.filter((_, i) => !indicesToRemove.has(i));
+            const discardedCount = p1SelectedDiscards.size;
+            
+            p.hand = newHand;
+            p1SelectedDiscards.clear();
+            
+            renderPlayerHand();
+            
+            addToLog("P1", `Acelera a [${steps} KMH]. ${discardedCount > 0 ? `Boxes.` : ''}`);
+            await moveEntity('p1', steps);
+            
+            isMoving = false; 
+            checkAndNext();
+        }
+
+        function skipTurn() {
+            if (isMoving || turnOrder[turnIdx] !== 'p1') return;
+            
+            let p = players.p1;
+            const discardedCount = p1SelectedDiscards.size;
+            
+            if (discardedCount > 0) {
+                p.hand = p.hand.filter((_, i) => !p1SelectedDiscards.has(i));
+                p1SelectedDiscards.clear();
+                addToLog("P1", `Boxes: Renovación de neumáticos.`, "text-zinc-500");
+            } else {
+                addToLog("P1", "Pasa turno. Ahorro de combustible.", "text-zinc-500");
+            }
+            
+            renderPlayerHand();
+            checkAndNext();
+        }
+
+        function calculateTurnOrder() {
+            const ids = Object.keys(players);
+            ids.sort((a, b) => {
+                const pa = players[a];
+                const pb = players[b];
+                
+                // Prioridad por vuelta
+                if (pa.lap !== pb.lap) return pb.lap - pa.lap;
+                
+                // Si la posición es 49 (inicio real adelantado al resto), debe ir primero
+                // El verde empieza en la 49, azul/rojo en 0. 49 > 0.
+                return pb.pos - pa.pos;
+            });
+            turnOrder = ids;
+            turnIdx = 0;
+            addToLog("SISTEMA", "Calculando posiciones en pista...");
+        }
+
+        async function checkAndNext() {
+            if (winners.length > 0) return;
+            
+            turnIdx++;
+            if (turnIdx >= turnOrder.length) {
+                await applySlipstream();
+                if (winners.length === 0) {
+                    calculateTurnOrder();
+                    startCurrentTurn();
+                }
+            } else {
+                startCurrentTurn();
+            }
+        }
+
+        function startCurrentTurn() {
+            isMoving = false; 
+            const activeId = turnOrder[turnIdx];
+            if (!activeId) return;
+            
+            updateTurnUI();
+            refillHand(activeId);
+
+            if (players[activeId].isCPU) {
+                isMoving = true;
+                setTimeout(() => handleCPUTurn(activeId), 600);
+            } else {
+                renderPlayerHand();
+            }
+        }
+
+        async function handleCPUTurn(pid) {
+            let cpu = players[pid];
+            let cardIdx = -1;
+            let sortedIndices = [];
+            for(let i=0; i<cpu.hand.length; i++) sortedIndices.push(i);
+            sortedIndices.sort((a,b) => cpu.hand[b] - cpu.hand[a]);
+            
+            for (let i of sortedIndices) {
+                let steps = cpu.hand[i];
+                if (!isCurveViolation(cpu.pos, steps)) {
+                    let dest = (cpu.pos + steps) % TOTAL_TILES;
+                    if (getCarsInSlot(dest).length < 2) {
+                        cardIdx = i;
+                        break;
+                    }
+                }
+            }
+
+            if (cardIdx === -1) {
+                addToLog(pid.toUpperCase(), "Sin hueco. Entra en Boxes.");
+                cpu.hand = [];
+                isMoving = false;
+            } else {
+                const steps = cpu.hand[cardIdx];
+                cpu.hand = cpu.hand.filter((_, idx) => idx !== cardIdx); 
+                addToLog(pid.toUpperCase(), `Ataca con [${steps} KMH].`);
+                await moveEntity(pid, steps);
+                isMoving = false;
+            }
+
+            checkAndNext();
+        }
+
+        async function applySlipstream() {
+            addToLog("DRS", "Comprobando rebufos...");
+            let changeOccurred = true;
+            let moved = new Set();
+
+            while (changeOccurred) {
+                changeOccurred = false;
+                const sorted = Object.keys(players).sort((a, b) => {
+                    const valA = players[a].lap * TOTAL_TILES + players[a].pos;
+                    const valB = players[b].lap * TOTAL_TILES + players[b].pos;
+                    return valB - valA;
+                });
+
+                for (let i = sorted.length - 1; i >= 0; i--) {
+                    let currentId = sorted[i];
+                    if (moved.has(currentId)) continue;
+
+                    let currentPos = players[currentId].pos;
+                    let currentLap = players[currentId].lap;
+                    
+                    let targetPos = (currentPos + 2) % TOTAL_TILES;
+                    let targetLap = targetPos < currentPos ? currentLap + 1 : currentLap;
+                    
+                    let foundLeader = Object.keys(players).find(otherId => {
+                        if (otherId === currentId) return false;
+                        return players[otherId].pos === targetPos && players[otherId].lap === targetLap;
+                    });
+
+                    if (foundLeader) {
+                        addToLog(currentId.toUpperCase(), "¡Succión! Gana +1 casilla.");
+                        moved.add(currentId);
+                        await moveEntity(currentId, 1, true);
+                        changeOccurred = true;
+                    }
+                }
+            }
+        }
+
+        function isCurveViolation(current, steps) {
+            if (steps <= SPEED_LIMIT_CURVE) return false;
+            for (let i = 1; i <= steps; i++) {
+                let check = (current + i) % TOTAL_TILES;
+                if (CURVE_TILES.includes(check)) return true;
+            }
+            return false;
+        }
+
+        function getCarsInSlot(slotIdx) {
+            return Object.keys(players).filter(id => players[id].pos === slotIdx);
+        }
+
+        async function moveEntity(pid, steps, isSlipstream = false) {
+            let entity = players[pid];
+
+            for (let i = 0; i < steps; i++) {
+                let next = (entity.pos + 1) % TOTAL_TILES;
+                
+                if (i === steps - 1 && !isSlipstream) {
+                    if (getCarsInSlot(next).length >= 2) {
+                        addToLog(pid.toUpperCase(), "¡Bloqueo en pista!");
+                        break; 
+                    }
+                }
+
+                if (next === 0 && entity.pos !== 0) {
+                    entity.lap++;
+                    updateProgressUI(pid);
+                    if (entity.lap > LAPS_TO_WIN) {
+                        if (!winners.includes(pid)) winners.push(pid);
+                        showWin(pid);
+                        return;
+                    }
+                }
+                
+                entity.pos = next;
+                updateCarsUI();
+                await new Promise(r => setTimeout(r, 100));
+            }
+        }
+
+        function getCarStyle(pos, pid) {
+            const [r, c] = TRACK_PATH[pos];
+            let rot = 0;
+            let ox = 0, oy = 0;
+            const others = getCarsInSlot(pos);
+            const myIdx = others.indexOf(pid);
+            const offsetAmt = 12;
+
+            // Lógica especial para la META (casilla 0)
+            if (pos === 0) {
+                rot = 90; // Orientación horizontal en meta
+                // En meta los coches se alinean en horizontal (oy cambia según el índice)
+                oy = (myIdx - (others.length - 1) / 2) * 16;
+                ox = 0;
+                return `transform: translate(${ox}px, ${oy}px) rotate(${rot}deg);`;
+            }
+
+            // Lógica estándar para el resto del circuito
+            const nextPos = (pos + 1) % TOTAL_TILES;
+            const [nr, nc] = TRACK_PATH[nextPos];
+            
+            if (nc > c) rot = 90;
+            else if (nc < c) rot = -90;
+            else if (nr > r) rot = 180;
+            else if (nr < r) rot = 0;
+
+            if (rot === 90 || rot === -90) oy = (myIdx - (others.length - 1) / 2) * offsetAmt;
+            else ox = (myIdx - (others.length - 1) / 2) * offsetAmt;
+
+            return `transform: translate(${ox}px, ${oy}px) rotate(${rot}deg);`;
+        }
+
+        function updateCarsUI() {
+            document.querySelectorAll('.car').forEach(c => c.remove());
+            Object.keys(players).forEach(id => {
+                const slotIdx = players[id].pos;
+                const slot = document.getElementById(`slot-${slotIdx}`);
+                if (slot) {
+                    const car = document.createElement('div');
+                    car.className = `car car-${id}`;
+                    car.style = getCarStyle(slotIdx, id);
+                    slot.appendChild(car);
+                }
+            });
+        }
+
+        function updateTurnUI() {
+            const badge = document.getElementById('turn-badge');
+            const activeId = turnOrder[turnIdx];
+            if (!activeId) return;
+            
+            badge.innerText = activeId === 'p1' ? "TU TURNO" : `RADIO: ${players[activeId].name}`;
+            badge.style.backgroundColor = players[activeId].color;
+            
+            Object.keys(players).forEach(id => {
+                const panel = document.getElementById(`${id}-panel`);
+                if (panel) {
+                    panel.style.opacity = (id === activeId) ? "1" : "0.5";
+                    panel.style.borderColor = (id === activeId) ? players[id].color : "rgba(255,255,255,0.05)";
+                }
+            });
+        }
+
+        function updateProgressUI(pid) {
+            const entity = players[pid];
+            const lapVal = document.getElementById(`${pid}-lap-val`);
+            const lapBar = document.getElementById(`${pid}-lap-bar`);
+            if (lapVal && lapBar) {
+                const curr = Math.max(1, Math.min(entity.lap, LAPS_TO_WIN));
+                lapVal.innerText = `${curr} / ${LAPS_TO_WIN}`;
+                lapBar.style.width = `${(curr / LAPS_TO_WIN) * 100}%`;
+            }
+        }
+
+        function addToLog(who, msg, cls = "text-zinc-400") {
+            const log = document.getElementById('log');
+            if (!log) return;
+            const div = document.createElement('div');
+            div.className = `border-l-2 pl-2 ${cls} mb-1 bg-white/5 p-1 rounded-r-sm`;
+            div.style.borderColor = players[who.toLowerCase()]?.color || "#555";
+            div.innerHTML = `<strong class="text-[7px] uppercase opacity-70">${who}:</strong> <span class="text-[9px]">${msg}</span>`;
+            log.prepend(div);
+        }
+
+        function triggerError() {
+            const p = document.getElementById('hand-panel');
+            if (p) {
+                p.classList.add('error-shake');
+                setTimeout(() => p.classList.remove('error-shake'), 400);
+            }
+        }
+
+        function showWin(pid) {
+            const m = document.getElementById('win-modal');
+            const t = document.getElementById('win-title');
+            const s = document.getElementById('win-subtitle');
+            
+            if (pid === 'p1') {
+                t.innerText = "¡GRAND PRIX!";
+                s.innerText = "Has dominado el circuito con maestría.";
+            } else {
+                t.innerText = "DERROTA";
+                s.innerText = `${players[pid].name} se lleva el trofeo.`;
+            }
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        }
+
+        function resetGame() {
+            isMoving = false;
+            winners = [];
+            p1SelectedDiscards.clear();
+            
+            // Parrilla Realista: CPU 2 (Verde) empieza en 49 (adelantado)
+            // Piloto y CPU 1 empiezan en 0
+            players.p1 = { pos: 0, lap: 1, hand: [], deck: createDeck(), id: 'p1', name: 'PILOTO', color: '#3b82f6', isCPU: false };
+            players.cpu1 = { pos: 0, lap: 1, hand: [], deck: createDeck(), id: 'cpu1', name: 'CPU 1', color: '#ef4444', isCPU: true };
+            players.cpu2 = { pos: 49, lap: 1, hand: [], deck: createDeck(), id: 'cpu2', name: 'CPU 2', color: '#22c55e', isCPU: true };
+            
+            document.getElementById('win-modal').classList.add('hidden');
+            const log = document.getElementById('log');
+            if (log) log.innerHTML = '';
+            
+            initBoard();
+            calculateTurnOrder();
+            
+            Object.keys(players).forEach(id => updateProgressUI(id));
+            
+            startCurrentTurn();
+        }
+
+        window.onload = resetGame;
+    </script>
+</body>
+</html>
